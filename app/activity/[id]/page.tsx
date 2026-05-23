@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { FoundationsActivityExperience } from '@/components/activity/foundations/FoundationsActivityExperience';
 import { Week1ActivityExperience } from '@/components/activity/week1/Week1ActivityExperience';
 import { Week2ActivityExperience } from '@/components/activity/week2/Week2ActivityExperience';
 import { Week3ActivityExperience } from '@/components/activity/week3/Week3ActivityExperience';
@@ -31,6 +32,20 @@ const verificationLines = [
   '[ok] validating mission checksum...',
   '[ok] cross-checking challenge context...'
 ];
+const foundationsActivityIds = new Set([
+  'threat-or-not',
+  'cia-triad-match-up',
+  'hackers-dictionary',
+  'password-builder',
+  'footprint-investigator',
+  'build-strongest-password',
+  'first-letter-cipher',
+  'second-letter-cipher',
+  'spy-message-relay',
+  'spot-deepfake-clue',
+  'ai-defender-or-attacker',
+  'phishing-email-hunt'
+]);
 
 export default function ActivityDetailPage() {
   const params = useParams<{ id: string }>();
@@ -63,6 +78,7 @@ export default function ActivityDetailPage() {
   );
   const activityId = activity?.id;
   const activityName = activity?.name;
+  const isFoundationsActivity = activity ? foundationsActivityIds.has(activity.id) : false;
 
   useEffect(() => {
     setDiscoveredFlag(null);
@@ -167,8 +183,30 @@ export default function ActivityDetailPage() {
     }
 
     const learnerId = getLearnerId();
+    const submittedFlag = flagInput.trim();
+    const isLocalFlagMatch = submittedFlag === challengeFlag;
+    const applyLocalCompletion = () => {
+      setResult('success');
+      setFeedbackText(`[ok] FLAG ACCEPTED - +${activity.points} pts awarded`);
+      setActivities((previous) =>
+        previous.map((item) =>
+          item.id === activity.id
+            ? {
+                ...item,
+                status: 'completed',
+                completedAt: item.completedAt ?? new Date().toISOString()
+              }
+            : item
+        )
+      );
+    };
 
     if (!learnerId) {
+      if (isLocalFlagMatch) {
+        applyLocalCompletion();
+        return;
+      }
+
       setResult('error');
       setFeedbackText('[err] SESSION EXPIRED - REAUTHENTICATE TO SUBMIT');
       return;
@@ -185,33 +223,36 @@ export default function ActivityDetailPage() {
     }
 
     try {
+      if (learnerId === 'local-learner') {
+        if (isLocalFlagMatch) {
+          applyLocalCompletion();
+          return;
+        }
+
+        setResult('error');
+        setFeedbackText('[err] INCORRECT FLAG - try again');
+        return;
+      }
+
       const verification = await verifyTask({
         userId: learnerId,
         taskName: activity.name,
-        flag: flagInput.trim(),
+        flag: submittedFlag,
         points: activity.points
       });
 
       if (!verification.verified) {
+        if (isLocalFlagMatch) {
+          applyLocalCompletion();
+          return;
+        }
+
         setResult('error');
         setFeedbackText('[err] INCORRECT FLAG - try again');
-        setIsSubmitting(false);
         return;
       }
 
-      setResult('success');
-      setFeedbackText(`[ok] FLAG ACCEPTED - +${activity.points} pts awarded`);
-      setActivities((previous) =>
-        previous.map((item) =>
-          item.id === activity.id
-            ? {
-                ...item,
-                status: 'completed',
-                completedAt: item.completedAt ?? new Date().toISOString()
-              }
-            : item
-        )
-      );
+      applyLocalCompletion();
 
       try {
         const taskRecords = await getLearnerTasks(learnerId);
@@ -220,6 +261,11 @@ export default function ActivityDetailPage() {
         // Local completion state is already set.
       }
     } catch (error) {
+      if (isLocalFlagMatch) {
+        applyLocalCompletion();
+        return;
+      }
+
       const errorText =
         error instanceof Error && error.message === 'TASK_NETWORK_ERROR'
           ? '[err] NETWORK ERROR - VERIFY CONNECTION AND RETRY'
@@ -333,7 +379,22 @@ export default function ActivityDetailPage() {
           )}
         </div>
 
-        {activity.week === 1 && (
+        {isFoundationsActivity && (
+          <>
+            <FoundationsActivityExperience
+              activityId={activity.id}
+              challengeFlag={challengeFlag}
+              onFlagDiscovered={handleWeek1FlagDiscovered}
+            />
+            {discoveredFlag && (
+              <p className="mt-3 rounded border border-[rgba(0,255,136,0.35)] bg-[rgba(0,255,136,0.08)] px-3 py-2 font-display text-[11px] uppercase tracking-[0.1em] text-neon-green">
+                [ok] simulator extracted mission flag: {discoveredFlag}
+              </p>
+            )}
+          </>
+        )}
+
+        {!isFoundationsActivity && activity.week === 1 && (
           <>
             <Week1ActivityExperience
               activityId={activity.id}

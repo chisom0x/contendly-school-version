@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { clearLearnerSession, getOperativeName } from '@/lib/auth';
+import {
+  clearLearnerSession,
+  getOperativeName,
+  hasLearnerSession
+} from '@/lib/auth';
 
 export function NavBar() {
   const router = useRouter();
@@ -11,6 +15,28 @@ export function NavBar() {
   useEffect(() => {
     setOperativeName(getOperativeName());
   }, []);
+
+  useEffect(() => {
+    let didExpire = false;
+
+    const syncRemaining = () => {
+      if (!hasLearnerSession()) {
+        if (!didExpire) {
+          didExpire = true;
+          clearLearnerSession();
+          router.replace('/access');
+        }
+        return;
+      }
+    };
+
+    syncRemaining();
+    const intervalId = window.setInterval(syncRemaining, 1000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [router]);
 
   const handleExit = () => {
     clearLearnerSession();

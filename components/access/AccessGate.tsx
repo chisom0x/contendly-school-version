@@ -5,19 +5,14 @@ import { useRouter } from 'next/navigation';
 import { SectionLabel } from '@/components/shared/SectionLabel';
 import { TerminalCursor } from '@/components/shared/TerminalCursor';
 import { persistLearnerSession } from '@/lib/auth';
-import { getLearnerMe, loginLearner, type AuthErrorCode } from '@/lib/auth-api';
+const LOCAL_LOGIN_CODE = '111111';
 
 const authLogLines = [
   '[ok] verifying access token...',
   '[ok] identity confirmed',
   '[ok] loading mission dashboard...'
 ];
-const authErrorTextByCode: Record<AuthErrorCode, string> = {
-  AUTH_INVALID_CODE: '// ACCESS DENIED - INVALID CODE',
-  AUTH_NETWORK_ERROR: '// NETWORK ERROR - CHECK CONNECTION AND RETRY',
-  AUTH_TOKEN_MISSING: '// AUTH SERVICE ERROR - INVALID SESSION RESPONSE',
-  AUTH_REQUEST_FAILED: '// AUTH SERVICE ERROR - TRY AGAIN'
-};
+const invalidCodeText = '// ACCESS DENIED - INVALID CODE';
 
 const terminalFeedLines = [
   '[SYSTEM] Project Defend - Season 01',
@@ -98,25 +93,19 @@ export function AccessGate() {
       await new Promise((resolve) => setTimeout(resolve, remaining));
     }
 
-    try {
-      const accessToken = await loginLearner(normalizedCode);
-      const learner = await getLearnerMe(accessToken);
-      persistLearnerSession(normalizedCode, accessToken, {
-        id: learner.id,
-        fullName: learner.fullName,
-        accessCode: learner.accessCode
-      });
-      router.push('/dashboard');
-    } catch (error) {
-      const errorCode =
-        error instanceof Error && error.message in authErrorTextByCode
-          ? (error.message as AuthErrorCode)
-          : 'AUTH_REQUEST_FAILED';
-
+    if (normalizedCode !== LOCAL_LOGIN_CODE) {
       setLogLines((prev) => [...prev, '[err] authentication rejected']);
-      setError(authErrorTextByCode[errorCode]);
+      setError(invalidCodeText);
       setIsAuthenticating(false);
+      return;
     }
+
+    persistLearnerSession(normalizedCode, `local-session-${Date.now()}`, {
+      id: 'local-learner',
+      fullName: 'ALPHA-7',
+      accessCode: normalizedCode
+    });
+    router.push('/dashboard');
   };
 
   return (
@@ -135,7 +124,8 @@ export function AccessGate() {
             <div className="rounded border border-border-dim border-l-4 border-l-neon-green bg-bg-surface p-5 shadow-panel-soft sm:p-7">
               <h1 className="font-display text-[22px] text-text-primary">Enter Access Code</h1>
               <p className="mt-2 max-w-lg text-sm text-text-secondary">
-                Use your instructor-issued access code to authenticate and begin your mission.
+                Local login is enabled. Use access code <span className="text-neon-green">111111</span>{' '}
+                to authenticate and begin your mission.
               </p>
 
               <div className="mt-6 space-y-3">
@@ -151,7 +141,7 @@ export function AccessGate() {
                       void handleAuthenticate();
                     }
                   }}
-                  placeholder="_ _ _ _ - _ _ _ _"
+                  placeholder="_ _ _ _ _ _"
                   className="terminal-input"
                   autoComplete="off"
                   disabled={isAuthenticating}
